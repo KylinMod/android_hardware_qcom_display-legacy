@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -11,6 +12,7 @@
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
  *   * Neither the name of Code Aurora Forum, Inc. nor the names of its
+ *   * Neither the name of The Linux Foundation nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -34,6 +36,9 @@ namespace gralloc {
 struct alloc_data;
 class IMemAlloc;
 class IonAlloc;
+#ifdef USE_PMEM_ADSP
+class PmemAdspAlloc;
+#endif
 
 class IAllocController {
 
@@ -65,6 +70,9 @@ class IonController : public IAllocController {
 
     private:
     IonAlloc* mIonAlloc;
+#ifdef USE_PMEM_ADSP
+    PmemAdspAlloc* mPmemAlloc;
+#endif
 
 };
 } //end namespace gralloc

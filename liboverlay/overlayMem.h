@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+* Copyright (c) 2011, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -11,6 +12,7 @@
 *      disclaimer in the documentation and/or other materials provided
 *      with the distribution.
 *    * Neither the name of Code Aurora Forum, Inc. nor the names of its
+*    * Neither the name of The Linux Foundation nor the names of its
 *      contributors may be used to endorse or promote products derived
 *      from this software without specific prior written permission.
 *
@@ -38,6 +40,8 @@
 
 #include "gralloc_priv.h"
 #include "overlayUtils.h"
+
+#include <mdp_version.h>
 
 namespace overlay {
 
@@ -121,6 +125,9 @@ inline bool OvMem::open(uint32_t numbufs,
     if(isSecure) {
         allocFlags |= GRALLOC_USAGE_PRIVATE_MM_HEAP;
         allocFlags |= GRALLOC_USAGE_PRIVATE_CP_BUFFER;
+        allocFlags = GRALLOC_USAGE_PRIVATE_MM_HEAP;
+        allocFlags |= GRALLOC_USAGE_PROTECTED;
+        allocFlags |= GRALLOC_USAGE_PRIVATE_UNCACHED;
     }
 
     int err = 0;

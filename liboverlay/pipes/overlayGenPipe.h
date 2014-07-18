@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -11,6 +12,7 @@
 *      disclaimer in the documentation and/or other materials provided
 *      with the distribution.
 *    * Neither the name of Code Aurora Forum, Inc. nor the names of its
+*    * Neither the name of The Linux Foundation nor the names of its
 *      contributors may be used to endorse or promote products derived
 *      from this software without specific prior written permission.
 *
@@ -90,6 +92,44 @@ public:
 
     /* dump the state of the object */
     void dump() const;
+
+class GenericPipe : utils::NoCopy {
+public:
+    /* ctor */
+    explicit GenericPipe(int dpy);
+    /* dtor */
+    ~GenericPipe();
+    bool init();
+    bool close();
+    /* Control APIs */
+    /* set source using whf, orient and wait flag */
+    void setSource(const utils::PipeArgs& args);
+    /* set crop a.k.a the region of interest */
+    void setCrop(const utils::Dim& d);
+    /* set orientation*/
+    void setTransform(const utils::eTransform& param);
+    /* set mdp posision using dim */
+    void setPosition(const utils::Dim& dim);
+    /* commit changes to the overlay "set"*/
+    bool commit();
+    /* Data APIs */
+    /* queue buffer to the overlay */
+    bool queueBuffer(int fd, uint32_t offset);
+    /* return cached startup args */
+    const utils::PipeArgs& getArgs() const;
+    /* retrieve cached crop data */
+    utils::Dim getCrop() const;
+    /* is closed */
+    bool isClosed() const;
+    /* is open */
+    bool isOpen() const;
+    /* return Ctrl fd. Used for S3D */
+    int getCtrlFd() const;
+    /* dump the state of the object */
+    void dump() const;
+    /* Return the dump in the specified buffer */
+    void getDump(char *buf, size_t len);
+
 private:
     /* set Closed pipe */
     bool setClosed();
@@ -104,6 +144,17 @@ private:
     //Whether rotator is used for 0-rot or otherwise
     bool mRotUsed;
 
+    int mFbNum;
+    /* Ctrl/Data aggregator */
+    CtrlData mCtrlData;
+    Rotator* mRot;
+    //Whether rotator is used for 0-rot or otherwise
+    bool mRotUsed;
+    //Whether we will do downscale opt. This is just a request. If the frame is
+    //not a candidate, we might not do it.
+    bool mRotDownscaleOpt;
+    //Whether the source is prerotated.
+    bool mPreRotated;
     /* Pipe open or closed */
     enum ePipeState {
         CLOSED,
@@ -324,7 +375,6 @@ inline bool GenericPipe<PANEL>::setClosed() {
     pipeState = CLOSED;
     return true;
 }
-
 } //namespace overlay
 
 #endif // OVERLAY_GENERIC_PIPE_H

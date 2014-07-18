@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
  * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -151,6 +152,18 @@ private:
     bool mIsTiled;
     bool mIsReady;
     pthread_mutex_t mLock;
+class OpenGLRenderer;
+
+class TileRenderer: public Singleton<TileRenderer> {
+    public:
+    TileRenderer();
+    ~TileRenderer();
+
+    void startTileRendering(OpenGLRenderer* renderer, int left, int top, int right, int bottom);
+    void endTileRendering(OpenGLRenderer*);
+
+    private:
+    bool mIsTiled;
 };
 
 }; // namespace uirenderer

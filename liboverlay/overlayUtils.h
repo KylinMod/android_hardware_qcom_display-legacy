@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -9,8 +10,8 @@
 *    * Redistributions in binary form must reproduce the above
 *      copyright notice, this list of conditions and the following
 *      disclaimer in the documentation and/or other materials provided
-*      with the distribution.
-*    * Neither the name of Code Aurora Forum, Inc. nor the names of its
+*      with the distribution.*    * Neither the name of Code Aurora Forum, Inc. nor the names of its
+*    * Neither the name of The Linux Foundation nor the names of its
 *      contributors may be used to endorse or promote products derived
 *      from this software without specific prior written permission.
 *
@@ -36,6 +37,7 @@
 #include <hardware/hardware.h>
 #include <hardware/gralloc.h> // buffer_handle_t
 #include <linux/msm_mdp.h> // flags
+#include <linux/msm_rotator.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +45,12 @@
 #include <sys/types.h>
 #include <utils/Log.h>
 #include "gralloc_priv.h" //for interlace
+
+// Older platforms do not support Venus.
+#ifndef VENUS_COLOR_FORMAT
+#define MDP_Y_CBCR_H2V2_VENUS (MDP_IMGTYPE_LIMIT2 + 1)
+#endif
+
 /*
 *
 * Collection of utilities functions/structs/enums etc...
@@ -62,10 +70,26 @@
 #define DEBUG_OVERLAY 0
 #define PROFILE_OVERLAY 0
 
+#ifndef MDSS_MDP_RIGHT_MIXER
+#define MDSS_MDP_RIGHT_MIXER 0x100
+#endif
+
+#ifndef MDP_OV_PIPE_FORCE_DMA
+#define MDP_OV_PIPE_FORCE_DMA 0x4000
+#endif
+
+#define FB_DEVICE_TEMPLATE "/dev/graphics/fb%u"
+#define NUM_FB_DEVICES 3
+
 namespace overlay {
 
 // fwd
 class Overlay;
+class OvFD;
+
+/* helper function to open by using fbnum */
+bool open(OvFD& fd, uint32_t fbnum, const char* const dev,
+    int flags = O_RDWR);
 
 namespace utils {
 struct Whf;
@@ -153,6 +177,9 @@ inline uint32_t format3DOutput(uint32_t x) {
     return (x & 0xF000) >> SHIFT_OUT_3D; }
 inline uint32_t format3DInput(uint32_t x) { return x & 0xF0000; }
 uint32_t getColorFormat(uint32_t format);
+inline uint32_t format3DOutput(uint32_t x) {
+    return (x & 0xF000) >> SHIFT_OUT_3D; }
+inline uint32_t format3DInput(uint32_t x) { return x & 0xF0000; }
 
 bool isHDMIConnected ();
 bool is3DTV();
@@ -161,7 +188,7 @@ bool usePanel3D();
 bool send3DInfoPacket (uint32_t fmt);
 bool enableBarrier (uint32_t orientation);
 uint32_t getS3DFormat(uint32_t fmt);
-
+bool isMdssRotator();
 template <int CHAN>
 bool getPositionS3D(const Whf& whf, Dim& out);
 
@@ -270,6 +297,25 @@ enum { MAX_PATH_LEN = 256 };
 enum eRotFlags {
     ROT_FLAG_DISABLED = 0,
     ROT_FLAG_ENABLED = 1 // needed in rot
+ * Usually, you want to open the rotator to make sure it is
+ * ready for business.
+ * */
+ enum eRotFlags {
+    ROT_FLAGS_NONE = 0,
+    //Use rotator for 0 rotation. It is used anyway for others.
+    ROT_0_ENABLED = 1 << 0,
+    //Enable rotator downscale optimization for hardware bugs not handled in
+    //driver. If downscale optimizatation is required,
+    //then rotator will be used even if its 0 rotation case.
+    ROT_DOWNSCALE_ENABLED = 1 << 1,
+    ROT_PREROTATED = 1 << 2,
+};
+
+enum eRotDownscale {
+    ROT_DS_NONE = 0,
+    ROT_DS_HALF = 1,
+    ROT_DS_FOURTH = 2,
+    ROT_DS_EIGHTH = 3,
 };
 
 /* The values for is_fg flag for control alpha and transp
@@ -301,6 +347,22 @@ enum eZorder {
     ZORDER_0,
     ZORDER_1,
     ZORDER_2,
+    OV_MDP_PIPE_FORCE_DMA = MDP_OV_PIPE_FORCE_DMA,
+    OV_MDP_DEINTERLACE = MDP_DEINTERLACE,
+    OV_MDP_SECURE_OVERLAY_SESSION = MDP_SECURE_OVERLAY_SESSION,
+    OV_MDP_SOURCE_ROTATED_90 = MDP_SOURCE_ROTATED_90,
+    OV_MDP_BACKEND_COMPOSITION = MDP_BACKEND_COMPOSITION,
+    OV_MDP_BLEND_FG_PREMULT = MDP_BLEND_FG_PREMULT,
+    OV_MDP_FLIP_H = MDP_FLIP_LR,
+    OV_MDP_FLIP_V = MDP_FLIP_UD,
+    OV_MDSS_MDP_RIGHT_MIXER = MDSS_MDP_RIGHT_MIXER,
+};
+
+enum eZorder {
+    ZORDER_0 = 0,
+    ZORDER_1,
+    ZORDER_2,
+    ZORDER_3,
     Z_SYSTEM_ALLOC = 0xFFFF
 };
 
@@ -321,6 +383,33 @@ enum eDest {
     OV_PIPE1 = 1 << 1,
     OV_PIPE2 = 1 << 2,
     OV_PIPE_ALL  = (OV_PIPE0 | OV_PIPE1 | OV_PIPE2)
+    OV_MDP_PIPE_RGB = 0,
+    OV_MDP_PIPE_VG,
+    OV_MDP_PIPE_DMA,
+    OV_MDP_PIPE_ANY, //Any
+};
+
+// Identify destination pipes
+// TODO Names useless, replace with int and change all interfaces
+enum eDest {
+    OV_P0 = 0,
+    OV_P1,
+    OV_P2,
+    OV_P3,
+    OV_P4,
+    OV_P5,
+    OV_P6,
+    OV_P7,
+    OV_P8,
+    OV_P9,
+    OV_INVALID,
+    OV_MAX = OV_INVALID,
+};
+
+/* Used when a buffer is split over 2 pipes and sent to display */
+enum {
+    OV_LEFT_SPLIT = 0,
+    OV_RIGHT_SPLIT,
 };
 
 /* values for copybit_set_parameter(OVERLAY_TRANSFORM) */
@@ -355,6 +444,7 @@ struct PipeArgs {
         zorder(Z_SYSTEM_ALLOC),
         isFg(IS_FG_OFF),
         rotFlags(ROT_FLAG_DISABLED){
+        rotFlags(ROT_FLAGS_NONE){
     }
 
     PipeArgs(eMdpFlags f, Whf _whf,
@@ -401,6 +491,10 @@ enum eOverlayState{
 
     /* External only for dual-disp */
     OV_DUAL_DISP,
+// Cannot use HW_OVERLAY_MAGNIFICATION_LIMIT, since at the time
+// of integration, HW_OVERLAY_MAGNIFICATION_LIMIT was a define
+enum { HW_OV_MAGNIFICATION_LIMIT = 20,
+    HW_OV_MINIFICATION_LIMIT  = 8
 };
 
 inline void setMdpFlags(eMdpFlags& f, eMdpFlags v) {
@@ -472,6 +566,10 @@ struct ScreenInfo {
 
 int getMdpFormat(int format);
 int getRotOutFmt(uint32_t format);
+int getHALFormat(int mdpFormat);
+int getDownscaleFactor(const int& src_w, const int& src_h,
+        const int& dst_w, const int& dst_h);
+
 /* flip is upside down and such. V, H flip
  * rotation is 90, 180 etc
  * It returns MDP related enum/define that match rot+flip*/
@@ -496,6 +594,11 @@ template <class T> inline void swap ( T& a, T& b )
 inline int alignup(int value, int a) {
     //if align = 0, return the value. Else, do alignment.
     return a ? ((((value - 1) / a) + 1) * a) : value;
+}
+
+inline int aligndown(int value, int a) {
+    //if align = 0, return the value. Else, do alignment.
+    return a ? ((value) & ~(a-1)) : value;
 }
 
 // FIXME that align should replace the upper one.
@@ -542,10 +645,13 @@ inline bool isYuv(uint32_t format) {
         case MDP_Y_CBCR_H2V1:
         case MDP_Y_CBCR_H2V2:
         case MDP_Y_CRCB_H2V2:
+        case MDP_Y_CRCB_H1V1:
+        case MDP_Y_CRCB_H2V1:
         case MDP_Y_CRCB_H2V2_TILE:
         case MDP_Y_CBCR_H2V2_TILE:
         case MDP_Y_CR_CB_H2V2:
         case MDP_Y_CR_CB_GH2V2:
+        case MDP_Y_CBCR_H2V2_VENUS:
             return true;
         default:
             return false;
@@ -603,6 +709,8 @@ inline const char* getFormatString(int format){
         "MDP_YCRCB_H1V1",
         "MDP_YCBCR_H1V1",
         "MDP_BGR_565",
+        "MDP_BGR_888",
+        "MDP_Y_CBCR_H2V2_VENUS",
         "MDP_IMGTYPE_LIMIT",
         "MDP_RGB_BORDERFILL",
         "MDP_FB_FORMAT",
@@ -734,6 +842,7 @@ inline Dim getPositionS3DImpl(const Whf& whf)
 
 template <>
 inline Dim getPositionS3DImpl<utils::OV_PIPE1>(const Whf& whf)
+inline Dim getPositionS3DImpl<utils::OV_RIGHT_SPLIT>(const Whf& whf)
 {
     switch (whf.format & OUTPUT_3D_MASK)
     {
@@ -782,6 +891,7 @@ inline Dim getCropS3DImpl(const Dim& in, uint32_t fmt) {
 
 template <>
 inline Dim getCropS3DImpl<utils::OV_PIPE1>(const Dim& in, uint32_t fmt) {
+inline Dim getCropS3DImpl<utils::OV_RIGHT_SPLIT>(const Dim& in, uint32_t fmt) {
     switch (fmt & INPUT_3D_MASK)
     {
         case HAL_3D_IN_SIDE_BY_SIDE_L_R:
@@ -820,6 +930,35 @@ inline void ScreenInfo::dump(const char* const s) const {
             s, mFBWidth, mFBHeight, mFBbpp, mFBystride);
 }
 
+inline bool openDev(OvFD& fd, int fbnum,
+    const char* const devpath, int flags) {
+    return overlay::open(fd, fbnum, devpath, flags);
+}
+
+template <class T>
+inline void even_ceil(T& value) {
+    if(value & 1)
+        value++;
+}
+
+template <class T>
+inline void even_floor(T& value) {
+    if(value & 1)
+        value--;
+}
+
+void preRotateSource(const eTransform& tr, Whf& whf, Dim& srcCrop);
+void getDump(char *buf, size_t len, const char *prefix, const mdp_overlay& ov);
+void getDump(char *buf, size_t len, const char *prefix, const msmfb_img& ov);
+void getDump(char *buf, size_t len, const char *prefix, const mdp_rect& ov);
+void getDump(char *buf, size_t len, const char *prefix,
+        const msmfb_overlay_data& ov);
+void getDump(char *buf, size_t len, const char *prefix, const msmfb_data& ov);
+void getDump(char *buf, size_t len, const char *prefix,
+        const msm_rotator_img_info& ov);
+void getDump(char *buf, size_t len, const char *prefix,
+        const msm_rotator_data_info& ov);
+
 } // namespace utils ends
 
 //--------------------Class Res stuff (namespace overlay only) -----------
@@ -847,7 +986,6 @@ class OvFD;
 bool open(OvFD& fd, uint32_t fbnum, const char* const dev,
     int flags = O_RDWR);
 
-/*
 * Holds one FD
 * Dtor will NOT close the underlying FD.
 * That enables us to copy that object around

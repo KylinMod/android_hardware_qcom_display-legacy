@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
-
+ * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -11,6 +11,7 @@
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
  *   * Neither the name of Code Aurora Forum, Inc. nor the names of its
+ *   * Neither the name of The Linux Foundation nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -33,6 +34,12 @@
 #include <stdlib.h>
 
 namespace gralloc {
+
+enum {
+    CACHE_CLEAN = 0x1,
+    CACHE_INVALIDATE,
+    CACHE_CLEAN_AND_INVALIDATE,
+};
 
 struct alloc_data {
     void           *base;
@@ -69,6 +76,7 @@ class IMemAlloc {
     // Clean and invalidate
     virtual int clean_buffer(void *base, size_t size,
                              int offset, int fd) = 0;
+                             int offset, int fd, int op) = 0;
 
     // Destructor
     virtual ~IMemAlloc() {};

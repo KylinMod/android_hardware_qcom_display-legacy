@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
  * Copyright (c) 2011 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +24,12 @@
 #include "tilerenderer.h"
 
 #define DEBUG_TILE_RENDERER 0
+
+#include <GLES2/gl2.h>
+#include <EGL/egl.h>
+#include <gl2ext.h>
+#include <OpenGLRenderer.h>
+#include "tilerenderer.h"
 
 namespace android {
 ANDROID_SINGLETON_STATIC_INSTANCE(uirenderer::TileRenderer) ;
@@ -321,11 +328,44 @@ int TileRenderer::startTilingInternal(int left, int top,
     int w = (right - left), h = (bottom - top);
     unsigned int preservemask = GL_NONE;
     int rendertarget = FRAMEBUFFER_FBO;
+TileRenderer::TileRenderer() {
+    mIsTiled = false;
+}
+
+TileRenderer::~TileRenderer() {
+}
+
+void TileRenderer::startTileRendering(OpenGLRenderer* renderer,
+                                      int left, int top,
+                                      int right, int bottom) {
+    int width = 0;
+    int height = 0;
+    GLenum status = GL_NO_ERROR;
+
+    if (renderer != NULL) {
+        renderer->getViewport(width, height);
+    }
+
+    if (!left && !right && !top && !bottom) {
+        left = 0;
+        top = 0;
+        right = width;
+        bottom = height;
+    }
+
+    if (!left && !right && !top && !bottom) {
+        //can't do tile rendering
+        ALOGE("can't tile render; drity region, width, height not available");
+        return;
+    }
+
+    int l = left, t = (height - bottom), w = (right - left), h = (bottom - top), preserve = 0;
 
     if (l < 0 || t < 0) {
         l = (l < 0) ? 0 : l;
         t = (t < 0) ? 0 : t;
         preserve = true;
+        preserve = 1;
     }
 
     if (w > width || h > height) {
@@ -398,6 +438,30 @@ int TileRenderer::verifyAndAdjustRect(int &left, int &top, int &right,
         ret = -1;
     }
     return ret;
+        preserve = 1;
+    }
+
+    //clear off all errors before tiling, if any
+    while ((status = glGetError()) != GL_NO_ERROR);
+
+    if (preserve)
+        glStartTilingQCOM(l, t, w, h, GL_COLOR_BUFFER_BIT0_QCOM);
+    else
+        glStartTilingQCOM(l, t, w, h, GL_NONE);
+
+    status = glGetError();
+    if (status == GL_NO_ERROR)
+        mIsTiled = true;
+}
+
+void TileRenderer::endTileRendering(OpenGLRenderer*) {
+    if (!mIsTiled) {
+        return;
+    }
+    glEndTilingQCOM(GL_COLOR_BUFFER_BIT0_QCOM);
+    mIsTiled = false;
+    GLenum status = GL_NO_ERROR;
+    while ((status = glGetError()) != GL_NO_ERROR);
 }
 
 }; // namespace uirenderer

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
-
+ * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -11,6 +11,7 @@
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
  *   * Neither the name of Code Aurora Forum, Inc. nor the names of its
+ *   * Neither the name of The Linux Foundation nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -33,6 +34,9 @@
 #include "memalloc.h"
 #include "gr.h"
 #include "ion_msm.h"
+#include <linux/msm_ion.h>
+#include "memalloc.h"
+#include "gr.h"
 
 namespace gralloc {
 
@@ -52,6 +56,7 @@ class IonAlloc : public IMemAlloc  {
 
     virtual int clean_buffer(void*base, size_t size,
                              int offset, int fd);
+                             int offset, int fd, int op);
 
     IonAlloc() { mIonFd = FD_INIT; }
 

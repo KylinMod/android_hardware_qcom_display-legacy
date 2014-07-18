@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -11,6 +12,7 @@
 *      disclaimer in the documentation and/or other materials provided
 *      with the distribution.
 *    * Neither the name of Code Aurora Forum, Inc. nor the names of its
+*    * Neither the name of The Linux Foundation nor the names of its
 *      contributors may be used to endorse or promote products derived
 *      from this software without specific prior written permission.
 *
@@ -65,6 +67,13 @@ public:
     bool setTransform(const utils::eTransform& p, const bool&);
     /* set mdp position using dim */
     bool setPosition(const utils::Dim& dim);
+    void setSource(const utils::PipeArgs& args);
+    /* set crop info and pass it down to mdp */
+    void setCrop(const utils::Dim& d);
+    /* set orientation */
+    void setTransform(const utils::eTransform& p);
+    /* set mdp position using dim */
+    void setPosition(const utils::Dim& dim);
     /* mdp set overlay/commit changes */
     bool commit();
 
@@ -93,6 +102,21 @@ private:
 
     /* Screen info */
     utils::ScreenInfo mInfo;
+    /* retrieve crop data */
+    utils::Dim getCrop() const;
+    utils::Dim getPosition() const;
+    /* Set downscale */
+    void setDownscale(int dscale_factor);
+    /* Update the src format based on rotator's dest */
+    void updateSrcFormat(const uint32_t& rotDstFormat);
+    /* dump the state of the object */
+    void dump() const;
+    /* Return the dump in the specified buffer */
+    void getDump(char *buf, size_t len);
+
+private:
+    // mdp ctrl struct(info e.g.)
+    MdpCtrl mMdp;
 };
 
 
@@ -121,6 +145,22 @@ public:
 
     /* sump the state of the obj */
     void dump() const;
+    /* calls close */
+    ~Data();
+    /* init fd etc */
+    bool init(uint32_t fbnum);
+    /* calls underlying mdp close */
+    bool close();
+    /* set overlay pipe id in the mdp struct */
+    void setPipeId(int id);
+    /* get overlay id in the mdp struct */
+    int getPipeId() const;
+    /* queue buffer to the overlay */
+    bool queueBuffer(int fd, uint32_t offset);
+    /* sump the state of the obj */
+    void dump() const;
+    /* Return the dump in the specified buffer */
+    void getDump(char *buf, size_t len);
 
 private:
     // mdp data struct
@@ -152,10 +192,13 @@ inline bool Ctrl::close() {
         return false;
     return true;
 }
-
 inline bool Ctrl::commit() {
     if(!mMdp.set()) {
         ALOGE("Ctrl commit failed set overlay");
+inline bool Ctrl::init(uint32_t fbnum) {
+    // MDP/FD init
+    if(!mMdp.init(fbnum)) {
+        ALOGE("Ctrl failed to init fbnum=%d", fbnum);
         return false;
     }
     return true;
@@ -164,6 +207,35 @@ inline bool Ctrl::commit() {
 inline bool Ctrl::getScreenInfo(utils::ScreenInfo& info) {
     if(!mMdp.getScreenInfo(info)){
         ALOGE("Ctrl failed to get screen info");
+inline void Ctrl::setSource(const utils::PipeArgs& args)
+{
+    mMdp.setSource(args);
+}
+
+inline void Ctrl::setPosition(const utils::Dim& dim)
+{
+    mMdp.setPosition(dim);
+}
+
+inline void Ctrl::setTransform(const utils::eTransform& orient)
+{
+    mMdp.setTransform(orient);
+}
+
+inline void Ctrl::setCrop(const utils::Dim& d)
+{
+    mMdp.setCrop(d);
+}
+
+inline void Ctrl::dump() const {
+    ALOGE("== Dump Ctrl start ==");
+    mMdp.dump();
+    ALOGE("== Dump Ctrl end ==");
+}
+
+inline bool Ctrl::commit() {
+    if(!mMdp.set()) {
+        ALOGE("Ctrl commit failed set overlay");
         return false;
     }
     return true;
@@ -179,10 +251,24 @@ inline int Ctrl::getFd() const {
 
 inline utils::ScreenInfo Ctrl::getScreenInfo() const {
     return mInfo;
+inline void Ctrl::updateSrcFormat(const uint32_t& rotDstFmt) {
+    mMdp.updateSrcFormat(rotDstFmt);
 }
 
 inline utils::Dim Ctrl::getCrop() const {
     return mMdp.getSrcRectDim();
+}
+
+inline utils::Dim Ctrl::getPosition() const {
+    return mMdp.getDstRectDim();
+}
+
+inline void Ctrl::setDownscale(int dscale_factor) {
+    mMdp.setDownscale(dscale_factor);
+}
+
+inline void Ctrl::getDump(char *buf, size_t len) {
+    mMdp.getDump(buf, len);
 }
 
 inline Data::Data() {
@@ -221,7 +307,9 @@ inline void Data::dump() const {
     ALOGE("== Dump Data MDP end ==");
 }
 
-
+inline void Data::getDump(char *buf, size_t len) {
+    mMdp.getDump(buf, len);
+}
 } // overlay
 
 #endif

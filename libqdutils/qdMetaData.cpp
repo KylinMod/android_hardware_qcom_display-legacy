@@ -13,6 +13,20 @@
  *   * Neither the name of Code Aurora Forum, Inc. nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
+ * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials provided
+ *       with the distribution.
+ *     * Neither the name of The Linux Foundation nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -35,6 +49,7 @@
 
 int setMetaData(private_handle_t *handle, DispParamType paramType,
                                                     void *param) {
+#ifdef QCOM_BSP
     if (!handle) {
         ALOGE("%s: Private handle is null!", __func__);
         return -1;
@@ -72,5 +87,6 @@ int setMetaData(private_handle_t *handle, DispParamType paramType,
     if(munmap(base, size))
         ALOGE("%s: failed to unmap ptr 0x%x, err %d", __func__, (int)base,
                                                                         errno);
+#endif
     return 0;
 }

@@ -1,6 +1,10 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
  * Copyright (c) 2010 - 2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2010 - 2013, The Linux Foundation. All rights reserved.
+ *
+ * Not a Contribution, Apache license notifications and license are retained
+ * for attribution purposes only.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -321,6 +325,10 @@ static int set_parameter_copybit(
                 if(value == COPYBIT_ENABLE) {
                     ctx->mFlags |= MDP_BLEND_FG_PREMULT;
                 } else if (value == COPYBIT_DISABLE) {
+            case COPYBIT_BLEND_MODE:
+                if(value == COPYBIT_BLENDING_PREMULT) {
+                    ctx->mFlags |= MDP_BLEND_FG_PREMULT;
+                } else {
                     ctx->mFlags &= ~MDP_BLEND_FG_PREMULT;
                 }
                 break;
@@ -505,6 +513,10 @@ static int blit_copybit(
     struct copybit_rect_t sr = { 0, 0, src->w, src->h };
     return stretch_copybit(dev, dst, src, &dr, &sr, region);
 }
+static int finish_copybit(struct copybit_device_t *dev)
+{
+    // NOP for MDP copybit
+}
 
 /*****************************************************************************/
 
@@ -536,6 +548,7 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->device.get = get;
     ctx->device.blit = blit_copybit;
     ctx->device.stretch = stretch_copybit;
+    ctx->device.finish = finish_copybit;
     ctx->mAlpha = MDP_ALPHA_NOP;
     ctx->mFlags = 0;
     ctx->mFD = open("/dev/graphics/fb0", O_RDWR, 0);

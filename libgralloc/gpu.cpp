@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
  * Copyright (c) 2011-2012 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +23,9 @@
 #include <sys/mman.h>
 
 #include <genlock.h>
+#ifndef QCOM_BSP
+#include <genlock.h>
+#endif
 
 #include "gr.h"
 #include "gpu.h"
@@ -29,6 +33,13 @@
 #include "alloc_controller.h"
 
 using namespace gralloc;
+
+#include <qdMetaData.h>
+#include "mdp_version.h"
+
+using namespace gralloc;
+
+#define SZ_1M 0x100000
 
 gpu_context_t::gpu_context_t(const private_module_t* module,
                              IAllocController* alloc_ctrl ) :
@@ -44,6 +55,9 @@ gpu_context_t::gpu_context_t(const private_module_t* module,
     common.close   = gralloc_close;
     alloc          = gralloc_alloc;
     allocSize      = gralloc_alloc_size;
+#ifdef QCOM_BSP
+    allocSize      = gralloc_alloc_size;
+#endif
     free           = gralloc_free;
 
 }
@@ -136,10 +150,19 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
         data.align = 8192;
     else
         data.align = getpagesize();
+
+    /* force 1MB alignment selectively for secure buffers, MDP5 onwards */
+    if ((qdutils::MDPVersion::getInstance().getMDPVersion() >= \
+         qdutils::MDSS_V5) && (usage & GRALLOC_USAGE_PROTECTED)) {
+        data.align = ALIGN(data.align, SZ_1M);
+        size = ALIGN(size, data.align);
+    }
+    data.size = size;
     data.pHandle = (unsigned int) pHandle;
     err = mAllocCtrl->allocate(data, usage);
 
     if (!err) {
+#ifdef QCOM_BSP
         /* allocate memory for enhancement data */
         alloc_data eData;
         eData.fd = -1;
@@ -168,6 +191,30 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
         }
 
         flags |= data.allocType;
+        ALOGE_IF(eDataErr, "gralloc failed for eDataErr=%s",
+                                          strerror(-eDataErr));
+#endif
+
+#ifndef QCOM_BSP
+        if (usage & GRALLOC_USAGE_PRIVATE_UNSYNCHRONIZED) {
+            flags |= private_handle_t::PRIV_FLAGS_UNSYNCHRONIZED;
+        }
+#endif
+
+        if (usage & GRALLOC_USAGE_HW_VIDEO_ENCODER ) {
+            flags |= private_handle_t::PRIV_FLAGS_VIDEO_ENCODER;
+        }
+
+        if (usage & GRALLOC_USAGE_HW_CAMERA_WRITE) {
+            flags |= private_handle_t::PRIV_FLAGS_CAMERA_WRITE;
+        }
+
+        if (usage & GRALLOC_USAGE_HW_CAMERA_READ) {
+            flags |= private_handle_t::PRIV_FLAGS_CAMERA_READ;
+        }
+
+        flags |= data.allocType;
+#ifdef QCOM_BSP
         int eBaseAddr = int(eData.base) + eData.offset;
         private_handle_t *hnd = new private_handle_t(data.fd, size, flags,
                 bufferType, format, width, height, eData.fd, eData.offset,
@@ -175,6 +222,17 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
 
         hnd->offset = data.offset;
         hnd->base = int(data.base) + data.offset;
+#else
+        private_handle_t* hnd = new private_handle_t(data.fd, size, flags,
+                bufferType, format, width,
+                height);
+#endif
+        hnd->offset = data.offset;
+        hnd->base = int(data.base) + data.offset;
+#ifdef QCOM_BSP
+        hnd->gpuaddr = 0;
+#endif
+
         *pHandle = hnd;
     }
 
@@ -197,6 +255,15 @@ void gpu_context_t::getGrallocInformationFromFormat(int inputFormat,
     } else if ((inputFormat == HAL_PIXEL_FORMAT_R_8) ||
                (inputFormat == HAL_PIXEL_FORMAT_RG_88)) {
         *colorFormat = inputFormat;
+                                                    int *bufferType)
+{
+    *bufferType = BUFFER_TYPE_VIDEO;
+
+    if (inputFormat < 0x7) {
+        // RGB formats
+        *bufferType = BUFFER_TYPE_UI;
+    } else if ((inputFormat == HAL_PIXEL_FORMAT_R_8) ||
+               (inputFormat == HAL_PIXEL_FORMAT_RG_88)) {
         *bufferType = BUFFER_TYPE_UI;
     }
 }
@@ -216,6 +283,26 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
     if ((ssize_t)size <= 0)
         return -EINVAL;
     size = (bufferSize != 0)? bufferSize : size;
+    int grallocFormat = format;
+    int bufferType;
+
+    //If input format is HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED then based on
+    //the usage bits, gralloc assigns a format.
+    if(format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
+        if(usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
+            grallocFormat = HAL_PIXEL_FORMAT_YCbCr_420_SP; //NV12
+        else if(usage & GRALLOC_USAGE_HW_CAMERA_READ)
+            grallocFormat = HAL_PIXEL_FORMAT_YCrCb_420_SP; //NV21
+        else if(usage & GRALLOC_USAGE_HW_CAMERA_WRITE)
+            grallocFormat = HAL_PIXEL_FORMAT_YCrCb_420_SP; //NV21
+    }
+
+    getGrallocInformationFromFormat(grallocFormat, &bufferType);
+    size = getBufferSizeAndDimensions(w, h, grallocFormat, alignedw, alignedh);
+
+    if ((ssize_t)size <= 0)
+        return -EINVAL;
+    size = (bufferSize >= size)? bufferSize : size;
 
     // All buffers marked as protected or for external
     // display need to go to overlay
@@ -231,11 +318,18 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
         err = gralloc_alloc_buffer(size, usage, pHandle, bufferType,
                                    format, alignedw, alignedh);
     }
+        (usage & GRALLOC_USAGE_PROTECTED)) {
+        bufferType = BUFFER_TYPE_VIDEO;
+    }
+
+    int err = gralloc_alloc_buffer(size, usage, pHandle, bufferType,
+            grallocFormat, alignedw, alignedh);
 
     if (err < 0) {
         return err;
     }
 
+#ifndef QCOM_BSP
     // Create a genlock lock for this buffer handle.
     err = genlock_create_lock((native_handle_t*)(*pHandle));
     if (err) {
@@ -243,6 +337,8 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
         free_impl(reinterpret_cast<private_handle_t*>(pHandle));
         return err;
     }
+#endif
+
     *pStride = alignedw;
     return 0;
 }
@@ -275,6 +371,30 @@ int gpu_context_t::free_impl(private_handle_t const* hnd) {
     if (err) {
         ALOGE("%s: genlock_release_lock failed", __FUNCTION__);
     }
+
+    terminateBuffer(&m->base, const_cast<private_handle_t*>(hnd));
+    IMemAlloc* memalloc = mAllocCtrl->getAllocator(hnd->flags);
+    int err = memalloc->free_buffer((void*)hnd->base, (size_t) hnd->size,
+                                    hnd->offset, hnd->fd);
+    if(err)
+        return err;
+#ifdef QCOM_BSP
+    // free the metadata space
+    unsigned long size = ROUND_UP_PAGESIZE(sizeof(MetaData_t));
+    err = memalloc->free_buffer((void*)hnd->base_metadata,
+                                (size_t) size, hnd->offset_metadata,
+                                hnd->fd_metadata);
+    if (err)
+        return err;
+#endif
+
+#ifndef QCOM_BSP
+    // Release the genlock
+    err = genlock_release_lock((native_handle_t*)hnd);
+    if (err) {
+        ALOGE("%s: genlock_release_lock failed", __FUNCTION__);
+    }
+#endif
 
     delete hnd;
     return 0;

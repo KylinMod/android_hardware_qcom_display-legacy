@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
 
+ * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -11,6 +13,7 @@
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
  *   * Neither the name of Code Aurora Forum, Inc. nor the names of its
+ *   * Neither the name of The Linux Foundation or the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -34,6 +37,7 @@
 #include <utils/Singleton.h>
 #include <cutils/properties.h>
 #include <mdp_version.h>
+
 using namespace android;
 namespace qdutils {
 // Enum containing the supported composition types
@@ -89,5 +93,21 @@ inline QCCompositionType::QCCompositionType()
     }
 
 }
+    mCompositionType = COMPOSITION_TYPE_GPU;
+    if (property_get("debug.composition.type", property, "gpu") > 0) {
+        if ((strncmp(property, "mdp", 3)) == 0) {
+            mCompositionType = COMPOSITION_TYPE_MDP;
+        } else if ((strncmp(property, "c2d", 3)) == 0) {
+            mCompositionType = COMPOSITION_TYPE_C2D;
+        } else if ((strncmp(property, "dyn", 3)) == 0) {
+#ifdef USE_MDP3
+            mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_MDP;
+#else
+            mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_C2D;
+#endif
+        }
+    }
+}
+
 }; //namespace qdutils
 #endif //INCLUDE_LIBQCOM_COMPTYPES
