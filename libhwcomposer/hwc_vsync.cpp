@@ -26,6 +26,14 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
+
+#ifdef NO_HW_VSYNC
+#include <sys/ioctl.h>
+#include <gralloc_priv.h>
+#include <fb_priv.h>
+#include <linux/msm_mdp.h>
+#endif
+
 #include "hwc_utils.h"
 #include "hwc_external.h"
 #include "string.h"
@@ -36,7 +44,6 @@
 
 namespace qhwc {
 
-=======
 #include <cutils/properties.h>
 #include <utils/Log.h>
 #include <fcntl.h>
@@ -77,11 +84,17 @@ static void *vsync_loop(void *param)
     setpriority(PRIO_PROCESS, 0, 
                 HAL_PRIORITY_URGENT_DISPLAY + ANDROID_PRIORITY_MORE_FAVORABLE);
 
+#ifndef NO_HW_VSYNC
     static char vdata[PAGE_SIZE];
 
     uint64_t cur_timestamp=0;
     int32_t len = -1, fd_timestamp = -1;
     bool fb1_vsync = false;
+#else
+    unsigned int e;
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+                ctx->mFbDev->common.module);
+#endif
 
     /* Currently read vsync timestamp from drivers
        e.g. VSYNC=41800875994
@@ -150,6 +163,15 @@ static void *vsync_loop(void *param)
 #else
         usleep(16000);
         proc->vsync(proc, 0, systemTime());
+        usleep(16666);
+        if(ctx->vstate.enable == true) {
+          if (m->flags & FB_NEED_SYNC_FLAG) {
+            m->flags &= ~FB_NEED_SYNC_FLAG;
+            e = 1;
+            ioctl(m->framebuffer->fd, MSMFB_OVERLAY_VSYNC_CTRL, &e);
+            proc->vsync(proc, 0, systemTime());
+          }
+        }
 #endif
 
       // repeat, whatever, you just did

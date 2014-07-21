@@ -203,7 +203,7 @@ void initContext(hwc_context_t *ctx)
 
     pthread_mutex_init(&(ctx->vstate.lock), NULL);
     pthread_cond_init(&(ctx->vstate.cond), NULL);
-    ctx->vstate.enable = false;
+    ctx->vstate.enable = true;
 
     ctx->hdmi_pending = false;
 

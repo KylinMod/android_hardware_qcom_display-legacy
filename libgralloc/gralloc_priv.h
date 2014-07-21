@@ -104,6 +104,12 @@ enum {
     /* Buffer content should be displayed on an primary display only */
     GRALLOC_USAGE_PRIVATE_INTERNAL_ONLY   =       0x00010000,
 
+    /* This flag is used for SECURE display usecase */
+    GRALLOC_USAGE_PRIVATE_SECURE_DISPLAY  =       0x00800000,
+
+    /* Buffer content should be displayed on an primary display only */
+    GRALLOC_USAGE_PRIVATE_INTERNAL_ONLY   =       0x00010000,
+
     /* Legacy heaps - these heaps are no-ops so we are making them zero
      * The flags need to be around to compile certain HALs which have
      * not cleaned up the code

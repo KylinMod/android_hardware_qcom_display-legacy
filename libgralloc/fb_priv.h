@@ -36,6 +36,9 @@ enum {
     PRIV_MAX_SWAP_INTERVAL = 1,
 };
 
+// set in fb_post() and cleared in vsync_loop()
+#define FB_NEED_SYNC_FLAG 0x80
+
 struct private_module_t {
     gralloc_module_t base;
     struct private_handle_t* framebuffer;
